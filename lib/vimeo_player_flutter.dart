@@ -53,7 +53,7 @@ class _VimeoPlayerState extends State<VimeoPlayer> {
               <head>
                 <style>
                   body {
-                   background-color: lightgray;
+                   background-color: black;
                    margin: 0px;
                    }
                 </style>
