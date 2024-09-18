@@ -1,5 +1,4 @@
 library vimeo_player_flutter;
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -21,45 +20,74 @@ class VimeoPlayer extends StatefulWidget {
 }
 
 class _VimeoPlayerState extends State<VimeoPlayer> {
-  final _controller = WebViewController();
+  late final WebViewController _controller;
+  bool _isFullScreen = false; // Track fullscreen state
 
   @override
   void initState() {
     super.initState();
-
-    // Load the Vimeo video when the player is initialized
-    _controller
-      ..loadRequest(_videoPage(widget.videoId))
-      ..setJavaScriptMode(JavaScriptMode.unrestricted);
-
-    // Set the screen orientation to landscape when the video starts playing
-    _rotateScreenToLandscape();
+    
+    // Create the WebView controller and add the JavaScript message handler
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'VideoState',
+        onMessageReceived: (message) {
+          if (message.message == 'play') {
+            _enterFullScreen(); // Rotate and make video fullscreen when it starts playing
+          } else if (message.message == 'pause') {
+            _exitFullScreen(); // Exit full-screen when the video pauses or ends
+          }
+        },
+      )
+      ..loadRequest(_videoPage(widget.videoId));
   }
 
   @override
   void dispose() {
-    // Set the screen orientation back to portrait when the video ends or the player is disposed
-    _rotateScreenToPortrait();
+    _exitFullScreen(); // Ensure we exit full-screen when the widget is disposed
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return WebViewWidget(
-      controller: _controller,
+    return Stack(
+      children: [
+        WebViewWidget(
+          controller: _controller,
+        ),
+        if (_isFullScreen)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              color: Colors.black,
+            ),
+          ),
+      ],
     );
   }
 
-  /// Rotate the screen to landscape mode
-  void _rotateScreenToLandscape() {
+  /// Enter full-screen mode
+  void _enterFullScreen() {
+    setState(() {
+      _isFullScreen = true;
+    });
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky); // Hide system UI
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
   }
 
-  /// Rotate the screen back to portrait mode
-  void _rotateScreenToPortrait() {
+  /// Exit full-screen mode
+  void _exitFullScreen() {
+    setState(() {
+      _isFullScreen = false;
+    });
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); // Show system UI
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -81,12 +109,32 @@ class _VimeoPlayerState extends State<VimeoPlayer> {
           <meta http-equiv="Content-Security-Policy"
           content="default-src * gap:; script-src * 'unsafe-inline' 'unsafe-eval'; connect-src *;
           img-src * data: blob: android-webview-video-poster:; style-src * 'unsafe-inline';">
+          <script src="https://player.vimeo.com/api/player.js"></script>
         </head>
         <body>
           <iframe 
+          id="vimeoPlayer"
           src="https://player.vimeo.com/video/$videoId?loop=0&autoplay=0" 
           width="100%" height="100%" frameborder="0" allow="fullscreen" 
           allowfullscreen></iframe>
+          <script>
+            var iframe = document.getElementById('vimeoPlayer');
+            var player = new Vimeo.Player(iframe);
+
+            // Detect when the video starts playing
+            player.on('play', function() {
+              VideoState.postMessage('play');
+            });
+
+            // Detect when the video is paused or stopped
+            player.on('pause', function() {
+              VideoState.postMessage('pause');
+            });
+
+            player.on('ended', function() {
+              VideoState.postMessage('pause');
+            });
+          </script>
         </body>
       </html>
     ''';
