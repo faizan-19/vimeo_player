@@ -1,12 +1,8 @@
-library vimeo_player_flutter;
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:flutter/services.dart'; // For screen orientation control
+import 'package:flutter/services.dart';
 
-/// Vimeo player for Flutter apps
-/// Flutter plugin based on the [webview_flutter] plugin
-/// [videoId] is the only required field to use this plugin
 class VimeoPlayer extends StatefulWidget {
   const VimeoPlayer({
     Key? key,
@@ -21,22 +17,22 @@ class VimeoPlayer extends StatefulWidget {
 
 class _VimeoPlayerState extends State<VimeoPlayer> {
   late final WebViewController _controller;
-  bool _isFullScreen = false; // Track fullscreen state
+  bool _isFullScreen = false;
 
   @override
   void initState() {
     super.initState();
-    
-    // Create the WebView controller and add the JavaScript message handler
+
+    // Initialize the WebView controller and load the Vimeo player page
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         'VideoState',
         onMessageReceived: (message) {
           if (message.message == 'play') {
-            _enterFullScreen(); // Rotate and make video fullscreen when it starts playing
-          } else if (message.message == 'pause') {
-            _exitFullScreen(); // Exit full-screen when the video pauses or ends
+            _enterFullScreen();
+          } else if (message.message == 'pause' || message.message == 'ended') {
+            _exitFullScreen();
           }
         },
       )
@@ -45,49 +41,46 @@ class _VimeoPlayerState extends State<VimeoPlayer> {
 
   @override
   void dispose() {
-    _exitFullScreen(); // Ensure we exit full-screen when the widget is disposed
+    _exitFullScreen(); // Ensure that we exit full-screen when the widget is disposed
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        WebViewWidget(
-          controller: _controller,
-        ),
-        if (_isFullScreen)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              color: Colors.black,
-            ),
-          ),
-      ],
+    return WillPopScope(
+      onWillPop: () async {
+        if (_isFullScreen) {
+          _exitFullScreen(); // Exit full-screen on back press
+          return false; // Prevent the default back behavior
+        }
+        return true; // Allow normal back behavior
+      },
+      child: WebViewWidget(
+        controller: _controller,
+      ),
     );
   }
 
-  /// Enter full-screen mode
+  /// Enter full-screen mode and rotate to landscape
   void _enterFullScreen() {
     setState(() {
       _isFullScreen = true;
     });
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky); // Hide system UI
+    // Rotate to landscape and hide system UI
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
   }
 
-  /// Exit full-screen mode
+  /// Exit full-screen mode and rotate back to portrait
   void _exitFullScreen() {
     setState(() {
       _isFullScreen = false;
     });
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge); // Show system UI
+    // Rotate back to portrait and show system UI
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -103,6 +96,7 @@ class _VimeoPlayerState extends State<VimeoPlayer> {
             body {
               background-color: black;
               margin: 0px;
+              overflow: hidden;
             }
           </style>
           <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0">
